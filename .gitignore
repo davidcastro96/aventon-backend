@@ -1,0 +1,47 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.whl
+
+# Distributions and packaging
+.Python
+build/
+dist/
+eggs/
+*.egg-info/
+wheels/
+*.whl
+
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Editors and IDEs
+# Visual Studio Code
+.vscode/ # Uncomment if you want to ignore VS Code settings
+# specific files in .vscode/ can be ignored, but generally the folder is tracked
+# to share settings with the team, so this is often commented out by default
+
+# PyCharm
+.idea/ # Typically ignored as it contains user-specific settings
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# Unit test / coverage
+.coverage
+.tox/
+htmlcov/
+
+# Miscellaneous
+*.log
+*.seed
+/instance/
+.pytest_cache/
