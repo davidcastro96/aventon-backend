@@ -1,10 +1,11 @@
-import os
-from dotenv import load_dotenv
+from pydantic_settings import BaseSettings
 
-load_dotenv()
+class Settings(BaseSettings):
+    DATABASE_URL: str
+    JWT_SECRET_KEY: str
+    JWT_ALGORITHM: str = "HS256"
 
-class Config:
-    """Clase de configuración base."""
-    # Accede a la variable SECRET_KEY definida en .env
-    SECRET_KEY = os.environ.get('SECRET_KEY') or 'una_clave_de_respaldo_muy_segura'
-    # No hay configuración de base de datos aquí
+    class Config:
+        env_file = ".env"
+
+settings = Settings()

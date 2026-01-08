@@ -1,0 +1,322 @@
+Proyecto: Aventón – Backend para aplicación de carro compartido
+
+Quiero que analices y propongas el diseño del backend para una aplicación llamada Aventón, orientada al carpooling (carro compartido).
+
+Contexto general
+
+Aventón es una aplicación similar a Uber o Didi, pero con un enfoque distinto:
+
+No es transporte bajo demanda.
+
+Los conductores programan rutas recurrentes o puntuales que ya realizan en su vida diaria.
+
+Los pasajeros se acoplan a rutas existentes, en lugar de solicitar viajes personalizados.
+
+Roles del sistema
+
+1. Conductor
+
+Registra una ruta desde un punto A hasta un punto B (puede tener puntos intermedios).
+
+La ruta se traza sobre un mapa.
+
+Define:
+
+Hora de salida
+
+Cantidad de asientos disponibles
+
+Precio por asiento
+
+El conductor no cambia su ruta para recoger pasajeros.
+
+2. Pasajero (usuario normal)
+
+Necesita ir de un punto A a un punto B.
+
+No busca un viaje exacto, sino que:
+
+Visualiza en el mapa rutas ya creadas por conductores.
+
+Puede unirse a una ruta que le sea conveniente, aunque deba caminar algunas calles para abordar el vehículo.
+
+Reglas clave del negocio
+
+El pasajero se adapta a la ruta del conductor, no al revés.
+
+El vehículo debe tener cupos disponibles.
+
+El precio se calcula por asiento.
+
+Las rutas pueden ser recurrentes (diarias) o únicas.
+
+Objetivo del backend
+
+Implementar la lógica necesaria para:
+
+Gestión de usuarios y roles
+
+Creación y consulta de rutas
+
+Disponibilidad de cupos
+
+Asociación de pasajeros a rutas existentes
+
+Diseñar una estructura de datos clara y simple, que facilite el desarrollo posterior del frontend tanto para conductor como para pasajero.
+
+Lo que necesito que entregues
+
+Propuesta de arquitectura del backend
+
+Modelo de datos (entidades principales y relaciones)
+
+Lógica principal de negocio
+
+Sugerencias de endpoints o servicios
+
+Consideraciones de escalabilidad y concurrencia
+
+
+## response
+¡Excelente iniciativa! Aventón tiene un enfoque muy interesante y diferenciado de las plataformas de transporte bajo demanda. El foco en rutas predefinidas por el conductor es clave y el backend debe reflejar esa lógica.
+
+  A continuación, te presento una propuesta de diseño para el backend, estructurada para ser escalable, robusta y, sobre todo, clara para facilitar el desarrollo de los clientes (apps móviles, web, etc.).
+
+  Dado el contexto inicial de tu proyecto (run.py, app/...), esta propuesta se basará en un stack de Python.
+
+  ---
+
+  1. Propuesta de Arquitectura del Backend
+
+  Recomiendo una arquitectura de microservicios o servicios desacoplados, pero para empezar, un monolito modular bien estructurado es más que suficiente y más rápido de desarrollar.
+
+   * Framework: FastAPI. Es moderno, extremadamente rápido, incluye validación de datos automática con Pydantic y genera documentación interactiva (Swagger UI) de la API sin esfuerzo. Esto es crucial para que los equipos de frontend puedan trabajar en paralelo.
+
+   * Base de Datos: PostgreSQL con la extensión PostGIS.
+       * ¿Por qué? PostGIS es el estándar de oro para trabajar con datos geoespaciales. Permite hacer consultas complejas de manera muy eficiente, como "¿Qué rutas pasan a 500 metros de este punto?", lo cual es el corazón de la lógica de Aventón.
+
+   * Cache: Redis.
+       * ¿Para qué? Para cachear rutas populares o resultados de búsquedas frecuentes, reduciendo la carga en la base de datos principal. También puede usarse para gestionar contadores de disponibilidad de asientos de forma muy rápida.
+
+   * Servidor: Uvicorn con Gunicorn, que es el estándar para desplegar aplicaciones ASGI como FastAPI.
+
+   * Contenerización: Docker y docker-compose para encapsular la aplicación, la base de datos y Redis, garantizando un entorno de desarrollo y producción consistente.
+
+  2. Modelo de Datos (Entidades y Relaciones)
+
+  Este es el pilar del sistema. Propongo las siguientes entidades principales. Los tipos de datos como GEOMETRY(Point) y GEOMETRY(LineString) son específicos de PostGIS.
+
+  User (Usuarios)
+  Almacena la información de conductores y pasajeros. Un rol puede ser inferido por sus acciones (si crea rutas, es conductor).
+
+   * id (PK, UUID)
+   * full_name (String)
+   * email (String, Unique)
+   * password_hash (String)
+   * phone_number (String, Unique)
+   * profile_picture_url (String, Nullable)
+   * created_at (Timestamp)
+
+  Vehicle (Vehículos)
+  Un conductor puede tener uno o más vehículos.
+
+   * id (PK, UUID)
+   * owner_id (FK a User.id)
+   * brand (String) - Marca (e.g., Toyota)
+   * model (String) - Modelo (e.g., Corolla)
+   * color (String)
+   * license_plate (String, Unique) - Placa
+
+  Route (Rutas)
+  La entidad central. Representa el viaje que un conductor crea.
+
+   * id (PK, UUID)
+   * driver_id (FK a User.id)
+   * vehicle_id (FK a Vehicle.id)
+   * departure_time (Timestamp with Timezone) - Hora y fecha de salida.
+   * estimated_arrival_time (Timestamp with Timezone)
+   * available_seats (Integer) - Asientos disponibles.
+   * price_per_seat (Decimal)
+   * is_recurrent (Boolean) - true si es una ruta diaria/semanal.
+   * recurrence_pattern (JSONB, Nullable) - Para reglas como {"type": "weekly", "days": ["mon", "wed", "fri"]}.
+   * status (Enum: active, cancelled, full, completed)
+   * `path` (GEOMETRY(LineString)) - La clave. Es la línea (polyline) que el conductor traza en el mapa. Permite las búsquedas geoespaciales.
+
+  RouteStop (Puntos Intermedios)
+  Puntos significativos que el conductor puede añadir a su ruta.
+
+   * id (PK, UUID)
+   * route_id (FK a Route.id)
+   * location (GEOMETRY(Point)) - Coordenadas del punto.
+   * order (Integer) - Para ordenar los puntos en la ruta (1, 2, 3...).
+
+  Booking (Reservas)
+  Asocia un pasajero a una ruta específica.
+
+   * id (PK, UUID)
+   * passenger_id (FK a User.id)
+   * route_id (FK a Route.id)
+   * pickup_point (GEOMETRY(Point)) - Punto exacto en el path de la ruta donde subirá el pasajero.
+   * dropoff_point (GEOMETRY(Point)) - Punto exacto en el path de la ruta donde bajará.
+   * status (Enum: confirmed, cancelled_by_passenger, completed)
+   * booked_at (Timestamp)
+
+  ---
+
+  3. Lógica Principal de Negocio
+
+  Creación de Ruta (Conductor)
+   1. El conductor, a través del frontend, traza su ruta en un mapa.
+   2. El frontend envía al backend:
+       * Coordenadas del punto de inicio, fin y puntos intermedios.
+       * El LineString completo (la "polyline") que representa el trayecto.
+       * Hora de salida, asientos, precio, vehículo, etc.
+   3. El backend crea un registro en la tabla Route y, si los hay, en RouteStop.
+
+  Búsqueda de Ruta (Pasajero) - El corazón del sistema
+   1. El pasajero introduce su punto de origen (A) y destino (B).
+   2. El frontend envía al backend las coordenadas de A y B.
+   3. El backend ejecuta una consulta geoespacial con PostGIS. Esta es la parte más importante:
+
+    1     -- Pseudo-SQL para ilustrar la idea
+    2     SELECT * FROM routes
+    3     WHERE
+    4       -- La ruta debe tener asientos disponibles y estar activa
+    5       available_seats > 0 AND status = 'active'
+    6       -- Y debe salir en un rango de tiempo aceptable (ej. hoy)
+    7       AND departure_time BETWEEN :start_time_window AND :end_time_window
+    8       -- Y el path de la ruta debe pasar cerca del origen del pasajero (ej. a 500m)
+    9       AND ST_DWithin(path, :passenger_origin_point, 500)
+   10       -- Y el path de la ruta también debe pasar cerca del destino del pasajero
+   11       AND ST_DWithin(path, :passenger_destination_point, 500);
+      La función ST_DWithin es extremadamente eficiente si las columnas de geometría tienen un índice GiST.
+   4. El backend devuelve una lista de las rutas que cumplen los criterios para que el frontend las pinte en el mapa.
+
+  Reserva de Asiento (Pasajero)
+   1. El pasajero selecciona una ruta y confirma la reserva.
+   2. El backend debe ejecutar una transacción atómica para evitar que dos personas reserven el último asiento al mismo tiempo:
+       * INICIAR TRANSACCIÓN.
+       * Consultar la ruta y bloquear la fila (SELECT ... FOR UPDATE).
+       * Verificar si available_seats > 0.
+       * Si hay asientos:
+           * Restar 1 a available_seats en la tabla Route.
+           * Crear un nuevo registro en la tabla Booking.
+       * Si no hay asientos, devolver un error.
+       * CONFIRMAR TRANSACCIÓN.
+   3. Opcionalmente, se puede disparar un evento para notificar al conductor y al pasajero.
+
+  ---
+
+  4. Sugerencias de Endpoints o Servicios (API RESTful)
+
+    1 # Autenticación y Usuarios
+    2 POST /auth/register                  # Registro de nuevo usuario
+    3 POST /auth/token                     # Login, devuelve un JWT
+    4 
+    5 GET  /users/me                       # Obtener perfil del usuario autenticado
+    6 PUT  /users/me                       # Actualizar perfil
+    7 
+    8 # Vehículos del conductor
+    9 POST /users/me/vehicles              # Registrar un nuevo vehículo
+   10 GET  /users/me/vehicles              # Listar mis vehículos
+   11 
+   12 # Rutas (perspectiva del Conductor)
+   13 POST /routes                         # Crear una nueva ruta
+   14 GET  /users/me/routes                # Listar las rutas que he creado
+   15 GET  /routes/{route_id}              # Ver detalle de una ruta (con sus pasajeros)
+   16 PUT  /routes/{route_id}              # Modificar una ruta (antes de que tenga reservas)
+   17 POST /routes/{route_id}/cancel       # Cancelar una ruta
+   18 
+   19 # Búsqueda y Reservas (perspectiva del Pasajero)
+   20 GET  /routes/search                  # El endpoint clave. Recibe lat/lon de origen/destino
+   21                                      # ?from_lat=...&from_lon=...&to_lat=...&to_lon=...
+   22 
+   23 POST /routes/{route_id}/bookings     # Reservar un asiento en una ruta
+   24 
+   25 GET  /users/me/bookings              # Listar mis próximas reservas
+
+  ---
+
+  5. Consideraciones de Escalabilidad y Concurrencia
+
+   * Concurrencia en Reservas: Ya mencionado. El uso de transacciones con SELECT ... FOR UPDATE es fundamental para garantizar la integridad de los datos de available_seats.
+
+   * Escalabilidad en Búsquedas:
+       * La búsqueda de rutas será la operación más costosa y frecuente.
+       * Índices GiST: Es obligatorio crear índices GiST en todas las columnas de tipo GEOMETRY (path en Route, location en RouteStop, etc.). Sin esto, las consultas ST_DWithin serán extremadamente lentas.
+       * Paginación: Todas las listas (búsquedas, mis rutas, etc.) deben ser paginadas.
+       * Read Replicas: A futuro, se podría configurar una base de datos secundaria (réplica de lectura) para derivar todas las consultas de búsqueda (GET) a ella, dejando la base de datos principal libre para operaciones de escritura (reservas, creación de rutas).
+
+   * Asincronía: Usar tareas en segundo plano (con Celery y Redis) para enviar notificaciones (email, push) después de una reserva o cancelación. Esto evita que el endpoint de la API espere a que se complete el envío, mejorando el tiempo de respuesta.
+
+  Este diseño proporciona una base sólida y escalable. El modelo de datos centrado en el path de la ruta y el uso de PostGIS son los pilares que permitirán implementar la lógica de negocio de Aventón de manera eficiente y correcta.
+
+## Estructura de los datos
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+CREATE EXTENSION IF NOT EXISTS postgis;
+    
+     -- Crear tipos ENUM para estados
+     CREATE TYPE route_status AS ENUM ('active', 'cancelled', 'full', 'completed');
+     CREATE TYPE booking_status AS ENUM ('confirmed', 'cancelled_by_passenger', 'completed');
+     
+     -- Tabla de Usuarios
+    CREATE TABLE users (
+        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        full_name VARCHAR NOT NULL,
+        email VARCHAR UNIQUE NOT NULL,
+        password_hash VARCHAR NOT NULL,
+        phone_number VARCHAR UNIQUE NOT NULL,
+        profile_picture_url VARCHAR,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX idx_users_email ON users(email);
+    
+    -- Tabla de Vehículos
+    CREATE TABLE vehicles (
+        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        owner_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        brand VARCHAR NOT NULL,
+        model VARCHAR NOT NULL,
+        color VARCHAR NOT NULL,
+        license_plate VARCHAR UNIQUE NOT NULL
+    );
+    
+    -- Tabla de Rutas
+    CREATE TABLE routes (
+        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        driver_id UUID NOT NULL REFERENCES users(id),
+       vehicle_id UUID NOT NULL REFERENCES vehicles(id),
+        departure_time TIMESTAMP WITH TIME ZONE NOT NULL,
+        estimated_arrival_time TIMESTAMP WITH TIME ZONE NOT NULL,
+        available_seats INTEGER NOT NULL CHECK (available_seats >= 0),
+        price_per_seat DECIMAL(10, 2) NOT NULL,
+        is_recurrent BOOLEAN DEFAULT false,
+        recurrence_pattern JSONB,
+        status route_status DEFAULT 'active',
+        -- La columna GEOMETRY para el trazado de la ruta. SRID 4326 es el estándar para lat/lon.
+        path GEOMETRY(LINESTRING, 4326) NOT NULL
+    );
+    -- Índice geoespacial (¡CRÍTICO PARA EL RENDIMIENTO!)
+    CREATE INDEX idx_routes_path ON routes USING GIST (path);
+    
+    -- Tabla de Puntos Intermedios de la Ruta
+    CREATE TABLE route_stops (
+        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        route_id UUID NOT NULL REFERENCES routes(id) ON DELETE CASCADE,
+        "order" INTEGER NOT NULL,
+        location GEOMETRY(POINT, 4326) NOT NULL
+    );
+    CREATE INDEX idx_route_stops_location ON route_stops USING GIST (location);
+    
+    -- Tabla de Reservas
+    CREATE TABLE bookings (
+        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        passenger_id UUID NOT NULL REFERENCES users(id),
+        route_id UUID NOT NULL REFERENCES routes(id),
+        status booking_status DEFAULT 'confirmed',
+        booked_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        pickup_point GEOMETRY(POINT, 4326) NOT NULL,
+        dropoff_point GEOMETRY(POINT, 4326) NOT NULL
+    );
+    CREATE INDEX idx_bookings_pickup_point ON bookings USING GIST (pickup_point);
+    CREATE INDEX idx_bookings_dropoff_point ON bookings USING GIST (dropoff_point);

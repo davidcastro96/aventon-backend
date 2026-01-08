@@ -1,2 +1,9 @@
-Flask
-python-dotenv
+fastapi
+uvicorn[standard]
+sqlalchemy
+psycopg2-binary
+pydantic-settings
+passlib[bcrypt]
+python-jose[cryptography]
+geoalchemy2
+alembic

@@ -45,3 +45,4 @@ htmlcov/
 *.seed
 /instance/
 .pytest_cache/
+alembic/versions/
