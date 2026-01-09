@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr, UUID4, computed_field
+from pydantic import BaseModel, EmailStr, UUID4, field_serializer
 from typing import List, Optional, Any
 from datetime import datetime
 from shapely import wkb
@@ -65,25 +65,25 @@ class RouteBase(BaseModel):
     estimated_arrival_time: datetime
     available_seats: int
     price_per_seat: float
-    # El path se mueve al response para serialización custom
-    # path: LineStringGeometry 
 
 class RouteCreate(RouteBase):
     vehicle_id: UUID4
     stops: Optional[List[RouteStopBase]] = []
-    path: LineStringGeometry # Se mantiene aquí para la creación
+    path: LineStringGeometry
 
 class RouteResponse(RouteBase):
     id: UUID4
     driver_id: UUID4
     vehicle_id: UUID4
     status: str
-    
-    @computed_field
-    @property
-    def path(self) -> Any:
+    path: Any # El campo debe existir para que el serializador funcione
+
+    @field_serializer('path')
+    def serialize_path(self, path: Any, _info):
         # Convierte el objeto WKBElement de la BD a un diccionario GeoJSON
-        return mapping(wkb.loads(bytes(self.path.data)))
+        if hasattr(path, 'data'):
+            return mapping(wkb.loads(bytes(path.data)))
+        return None
 
     class Config:
         from_attributes = True
