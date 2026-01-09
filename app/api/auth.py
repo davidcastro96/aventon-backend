@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer # <-- Añadido
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm # <-- Añadido
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
 
