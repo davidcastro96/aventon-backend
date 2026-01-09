@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 from app.db import get_db
 from app.models import models
@@ -9,10 +9,11 @@ from app.schemas import schemas
 from app.config import settings
 from passlib.context import CryptContext
 from jose import JWTError, jwt
-
-router = APIRouter()
+from app.schemas import schemas
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/token")
 
 def create_access_token(data: dict, expires_delta: timedelta | None = None):
     to_encode = data.copy()
@@ -24,13 +25,37 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None):
     encoded_jwt = jwt.encode(to_encode, settings.JWT_SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
     return encoded_jwt
 
+def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        payload = jwt.decode(token, settings.JWT_SECRET_KEY, algorithms=[settings.JWT_ALGORITHM])
+        email: str = payload.get("sub")
+        if email is None:
+            raise credentials_exception
+        token_data = schemas.TokenData(email=email)
+    except JWTError:
+        raise credentials_exception
+    user = db.query(models.User).filter(models.User.email == token_data.email).first()
+    if user is None:
+        raise credentials_exception
+    return user
+
+
 @router.post("/register", response_model=schemas.UserResponse)
 def create_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
     db_user = db.query(models.User).filter(models.User.email == user.email).first()
     if db_user:
         raise HTTPException(status_code=400, detail="Email already registered")
     
-    hashed_password = pwd_context.hash(user.password)
+    # Truncar la contraseña a 72 bytes para cumplir con el límite de bcrypt
+    password_bytes = user.password.encode('utf-8')
+    truncated_password = password_bytes[:72]
+    
+    hashed_password = pwd_context.hash(truncated_password)
     db_user = models.User(
         full_name=user.full_name,
         email=user.email,

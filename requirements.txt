@@ -3,7 +3,8 @@ uvicorn[standard]
 sqlalchemy
 psycopg2-binary
 pydantic-settings
-passlib[bcrypt]
+bcrypt==3.2.0
+passlib
 python-jose[cryptography]
 geoalchemy2
 alembic

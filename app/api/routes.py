@@ -4,19 +4,21 @@ from typing import List
 from app.db import get_db
 from app.models import models
 from app.schemas import schemas
+from app.api.auth import get_current_user
 
 router = APIRouter()
 
-@router.post("/", response_model=schemas.RouteResponse)
-def create_route(route: schemas.RouteCreate, db: Session = Depends(get_db)):
-    # Placeholder for user authentication
-    driver_id = "f47ac10b-58cc-4372-a567-0e02b2c3d479" # This should come from the authenticated user token
-
+@router.post("/", response_model=schemas.RouteResponse, status_code=201)
+def create_route(
+    route: schemas.RouteCreate, 
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
     # Convert Pydantic schema to a dictionary for GeoAlchemy2
     path_dict = route.path.model_dump()
 
     db_route = models.Route(
-        driver_id=driver_id,
+        driver_id=current_user.id,
         vehicle_id=route.vehicle_id,
         departure_time=route.departure_time,
         estimated_arrival_time=route.estimated_arrival_time,
