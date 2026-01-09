@@ -7,6 +7,7 @@ from app.db import get_db
 from app.models import models
 from app.schemas import schemas
 from app.api.auth import get_current_user
+from app.services.geolocation import get_location_details
 
 router = APIRouter()
 
@@ -24,8 +25,21 @@ def create_route(
     if not vehicle:
         raise HTTPException(status_code=404, detail="Vehicle not found or does not belong to the current user")
 
+    # Obtener precio por km
+    price_per_km = route.price_per_km
+    if price_per_km is None:
+        default_price_config = db.query(models.SystemConfig).filter(models.SystemConfig.key == 'default_price_per_km_cop').first()
+        if not default_price_config:
+            raise HTTPException(status_code=500, detail="Default price per km is not configured")
+        price_per_km = float(default_price_config.value)
+
+    # Obtener detalles de localización (simulado)
+    start_coords = route.path.coordinates[0]
+    end_coords = route.path.coordinates[-1]
+    start_location = get_location_details(lon=start_coords[0], lat=start_coords[1])
+    end_location = get_location_details(lon=end_coords[0], lat=end_coords[1])
+
     # Convertir Pydantic schema a un objeto WKBElement para GeoAlchemy2
-    # El path de entrada es un LineStringGeometry
     coordinates_str = ", ".join([f"{p[0]} {p[1]}" for p in route.path.coordinates])
     path_wkb = WKBElement(f'SRID=4326;LINESTRING({coordinates_str})', extended=True)
 
@@ -35,8 +49,12 @@ def create_route(
         departure_time=route.departure_time,
         estimated_arrival_time=route.estimated_arrival_time,
         available_seats=route.available_seats,
-        price_per_seat=route.price_per_seat,
-        path=path_wkb # Asignar el WKBElement directamente
+        price_per_km=price_per_km,
+        path=path_wkb,
+        start_city=start_location['city'],
+        start_country=start_location['country'],
+        end_city=end_location['city'],
+        end_country=end_location['country']
     )
     db.add(db_route)
     db.commit()

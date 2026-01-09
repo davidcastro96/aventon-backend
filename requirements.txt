@@ -9,3 +9,6 @@ python-jose[cryptography]
 geoalchemy2
 alembic
 shapely
+# Testing dependencies
+pytest
+httpx
