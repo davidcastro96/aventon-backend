@@ -8,3 +8,4 @@ passlib
 python-jose[cryptography]
 geoalchemy2
 alembic
+shapely
